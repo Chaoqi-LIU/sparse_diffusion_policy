@@ -21,8 +21,7 @@ OmegaConf.register_new_resolver("eval", eval, replace=True)
 @hydra.main(
     version_base=None,
     config_path=str(pathlib.Path(__file__).parent.joinpath(
-        'config', 'tmp')),
-    config_name="full.yaml",
+        'diffusion_policy','config'))
 )
 def main(cfg: OmegaConf):
     # resolve immediately so all the ${now:} resolvers
@@ -36,7 +35,7 @@ def main(cfg: OmegaConf):
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"]='0,'
     os.environ["MUJOCO_GL"]="osmesa"
-    from utils.recursive_yaml import read_yaml, write_yaml
-    data = read_yaml('config/base.yaml')
-    write_yaml(data, 'config/tmp/full.yaml')
+    # from utils.recursive_yaml import read_yaml, write_yaml
+    # data = read_yaml('config/base.yaml')
+    # write_yaml(data, 'config/tmp/full.yaml')
     main()

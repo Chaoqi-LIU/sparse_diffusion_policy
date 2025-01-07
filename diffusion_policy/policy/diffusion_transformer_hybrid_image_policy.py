@@ -119,13 +119,12 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         patch_size = [2,2,2,2]
         n_blocks_list = [2,2,2,2]
         
-
-        obs_encoder.obs_nets.agentview_image.backbone = PatchMoeResNet(k = k, 
+        obs_encoder.obs_nets.corner2_rgb.backbone = PatchMoeResNet(k = k, 
                                                                        exp = exp, 
                                                                        patch_size=patch_size ,
                                                                        n_blocks_list=n_blocks_list)
         
-        obs_encoder.obs_nets.robot0_eye_in_hand_image.backbone = PatchMoeResNet(k = k, 
+        obs_encoder.obs_nets.behindGripper_rgb.backbone = PatchMoeResNet(k = k, 
                                                                                 exp = exp, 
                                                                                 patch_size=patch_size ,
                                                                                 n_blocks_list=n_blocks_list)
