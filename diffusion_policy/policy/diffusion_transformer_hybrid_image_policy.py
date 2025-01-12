@@ -64,6 +64,7 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
             'scan': []
         }
         obs_key_shapes = dict()
+        obs_ports = []
         for key, attr in obs_shape_meta.items():
             shape = attr['shape']
             obs_key_shapes[key] = list(shape)
@@ -71,10 +72,13 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
             type = attr.get('type', 'low_dim')
             if type == 'rgb':
                 obs_config['rgb'].append(key)
+                obs_ports.append(key)
             elif type == 'low_dim':
                 obs_config['low_dim'].append(key)
+                obs_ports.append(key)
             else:
                 raise RuntimeError(f"Unsupported obs type: {type}")
+        self.obs_ports = obs_ports
 
         # get raw robomimic config
         config = get_robomimic_config(
@@ -411,3 +415,10 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         loss = reduce(loss, 'b ... -> b (...)', 'mean')
         loss = loss.mean()
         return loss+aux_loss
+
+
+    def get_policy_name(self):
+        return "dp_moe_rgb"
+
+    def get_observation_ports(self):
+        return self.obs_ports

@@ -124,7 +124,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
         # env_runner3: BaseImageRunner
         for i in range(cfg.task_num):
             env_runners.append(hydra.utils.instantiate(cfg[f'task{i}'].env_runner, output_dir=self.output_dir))
-            assert isinstance(env_runners[i], BaseImageRunner)
+            assert isinstance(env_runners[i], BaseImageRunner), type(env_runners[i])
 
 
         # configure logging
@@ -250,7 +250,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
 
                 # run rollout
                 runner_logs = []
-                if ((self.epoch+1) % cfg.training.rollout_every) == 0:
+                if (self.epoch % cfg.training.rollout_every) == 0:
                     for i, env_runner in enumerate(env_runners):
                         runner_log = env_runner.run(policy,task_id=torch.tensor([i], dtype=torch.int64).to(device))
                         runner_log = {key + f'_{i}': value for key, value in runner_log.items()}

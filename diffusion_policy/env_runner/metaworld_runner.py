@@ -13,14 +13,14 @@ from diffusion_policy.gym_util.video_recording_wrapper import VideoRecordingWrap
 from diffusion_policy.gym_util.async_vector_env import AsyncVectorEnv
 from diffusion_policy.env.metaworld.metaworld_wrapper import MetaworldEnv
 from diffusion_policy.env.metaworld.metaworld_factory import get_subtasks
-from diffusion_policy.env_runner.base_image_runner import BaseImagePolicy, obs_dropout
+from diffusion_policy.env_runner.base_image_runner import BaseImageRunner
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.common.pytorch_util import dict_apply
 
 from typing import Optional, List
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-class MetaworldRunner(BaseRunner):
+class MetaworldRunner(BaseImageRunner):
     def __init__(self,
         output_dir,
         task_name: str,
@@ -138,7 +138,7 @@ class MetaworldRunner(BaseRunner):
 
 
     @torch.inference_mode()
-    def run(self, policy: BasePolicy):
+    def run(self, policy: BaseImagePolicy, task_id):
         device = policy.device
         dtype = policy.dtype
         policy_name = policy.get_policy_name()
@@ -196,7 +196,7 @@ class MetaworldRunner(BaseRunner):
                     action = policy.predict_action({
                         port: obs_dict[port] 
                         for port in policy.get_observation_ports()
-                    })['action'].detach().cpu().numpy()
+                    }, task_id)['action'].detach().cpu().numpy()
 
                 if not np.all(np.isfinite(action)):
                     raise RuntimeError("NaN of Inf action")

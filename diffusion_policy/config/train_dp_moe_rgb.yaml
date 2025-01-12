@@ -2,10 +2,13 @@ defaults:
   - _self_
   - task: metaworld_mt10
 
+task0: ${task}
+
 name: train_diffusion_transformer_hybrid
 _target_: diffusion_policy.workspace.train_diffusion_transformer_hybrid_workspace.TrainDiffusionTransformerHybridWorkspace
 
 task_name: ${task.name}
+task_num: 1
 shape_meta: ${task.shape_meta}
 exp_name: "default"
 
@@ -111,7 +114,7 @@ training:
   tqdm_interval_sec: 1.0
 
 logging:
-  project: diffusion_policy_debug
+  project: sparse_diffusion_policy
   resume: True
   mode: online
   name: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${task_name}
@@ -129,14 +132,14 @@ checkpoint:
   save_last_snapshot: False
 
 multi_run:
-  run_dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+  run_dir: outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
   wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${task_name}
 
 hydra:
   job:
     override_dirname: ${name}
   run:
-    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+    dir: outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
   sweep:
-    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+    dir: outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
     subdir: ${hydra.job.num}

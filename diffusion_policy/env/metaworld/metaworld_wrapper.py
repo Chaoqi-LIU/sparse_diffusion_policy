@@ -200,8 +200,8 @@ class MetaworldEnv(gym.Env):
         
     def get_obs_dict(self) -> Dict[str, np.ndarray]:
         rgbs: Dict
-        depths: Dict
-        pointcloud: np.ndarray
+        # depths: Dict
+        # pointcloud: np.ndarray
         robot_state: np.ndarray
         
         rgbs = self.get_rgb()
@@ -211,8 +211,8 @@ class MetaworldEnv(gym.Env):
         for k, v in rgbs.items():
             rgbs[k] = v.transpose(2, 0, 1)
 
-        for k, v in depths.items():
-            depths[k] = np.expand_dims(v, axis=0)
+        # for k, v in depths.items():
+        #     depths[k] = np.expand_dims(v, axis=0)
 
         obs_dict = {}
         for cam in self.camera_names:
