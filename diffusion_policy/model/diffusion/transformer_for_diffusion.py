@@ -7,7 +7,6 @@ from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 import torch.nn.functional as F
 from torch import nn, Tensor
 import copy
-from mixture_of_experts.moe import MoE
 from mixture_of_experts.task_moe import TaskMoE
 logger = logging.getLogger(__name__)
 class TransformerDecoder(nn.Module):
@@ -35,7 +34,7 @@ class TransformerDecoder(nn.Module):
 
     def forward(self, tgt: Tensor,task_id, memory: Tensor, tgt_mask: Optional[Tensor] = None,
                 memory_mask: Optional[Tensor] = None, tgt_key_padding_mask: Optional[Tensor] = None,
-                memory_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+                memory_key_padding_mask: Optional[Tensor] = None) -> Tuple[Tensor,float,Tensor]:
         r"""Pass the inputs (and mask) through the decoder layer in turn.
 
         Args:

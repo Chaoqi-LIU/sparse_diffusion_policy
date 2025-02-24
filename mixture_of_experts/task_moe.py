@@ -722,6 +722,10 @@ if __name__ == '__main__':
   model = TaskMoE(input_size=20,head_size=10,num_experts=5,k=2,activation=nn.Sequential(
                         nn.GELU(),
                     ),noisy_gating=False)
+
+  num_param = sum(p.numel() for p in model.parameters())
+  print('num_param: ', num_param)
+
   input_data = torch.randn(batch_size, sequence_length, input_size)
 
   # Specify the task or task batch you want to perform inference for.
@@ -732,5 +736,5 @@ if __name__ == '__main__':
   skip_mask = None
 
   # Perform inference (forward pass) using the TaskMoE model for the specified task.
-  output, loss = model(input_data, task_batch_index, skip_mask=skip_mask)
+  output, loss, prob = model(input_data, task_batch_index, skip_mask=skip_mask)
   print(output.shape)

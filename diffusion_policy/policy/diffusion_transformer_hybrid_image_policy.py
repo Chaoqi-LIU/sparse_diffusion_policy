@@ -1,10 +1,8 @@
 from typing import Dict, Tuple
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-from einops import rearrange, reduce
+from einops import reduce
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 from diffusion_policy.model.common.normalizer import LinearNormalizer
@@ -15,13 +13,13 @@ from diffusion_policy.common.robomimic_config_util import get_robomimic_config
 from robomimic.algo import algo_factory
 from robomimic.algo.algo import PolicyAlgo
 import robomimic.utils.obs_utils as ObsUtils
-import robomimic.models.base_nets as rmbn
 import diffusion_policy.model.vision.crop_randomizer as dmvc
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
-from patch_moe.encoder import MoEEncoder
-
-from patch_moe.resnet import ResNet, PatchMoeResNet
+from patch_moe.resnet import PatchMoeResNet
 import robomimic
+
+
+
 class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
     def __init__(self, 
             shape_meta: dict,
