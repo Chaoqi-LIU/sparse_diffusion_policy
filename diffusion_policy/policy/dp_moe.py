@@ -1,26 +1,28 @@
-from typing import Dict, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import reduce
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+import robomimic
+from robomimic.algo import algo_factory
+from robomimic.algo.algo import PolicyAlgo
+import robomimic.utils.obs_utils as ObsUtils
 
+from patch_moe.resnet import PatchMoeResNet
+from mixture_of_experts.task_moe import TaskMoE
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.model.diffusion.transformer_for_diffusion import TransformerForDiffusion
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy.common.robomimic_config_util import get_robomimic_config
-from robomimic.algo import algo_factory
-from robomimic.algo.algo import PolicyAlgo
-import robomimic.utils.obs_utils as ObsUtils
 import diffusion_policy.model.vision.crop_randomizer as dmvc
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
-from patch_moe.resnet import PatchMoeResNet
-import robomimic
+
+from typing import Dict, Tuple
 
 
 
-class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
+class DiffusionTransformerMoePolicy(BaseImagePolicy):
     def __init__(self, 
             shape_meta: dict,
             noise_scheduler: DDPMScheduler,
@@ -115,22 +117,15 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
 
         obs_encoder = policy.nets['policy'].nets['encoder'].nets['obs']
 
+        # set up patch moe resnet backbone
         k = [4,4,2,2]
         exp = [8,8,4,4]
-        ### [16,16,8,8]
         patch_size = [2,2,2,2]
         n_blocks_list = [2,2,2,2]
-        
-        obs_encoder.obs_nets.corner2_rgb.backbone = PatchMoeResNet(k = k, 
-                                                                       exp = exp, 
-                                                                       patch_size=patch_size ,
-                                                                       n_blocks_list=n_blocks_list)
-        
-        obs_encoder.obs_nets.behindGripper_rgb.backbone = PatchMoeResNet(k = k, 
-                                                                                exp = exp, 
-                                                                                patch_size=patch_size ,
-                                                                                n_blocks_list=n_blocks_list)
-        
+        for rgb_port in obs_config['rgb']:
+            getattr(obs_encoder.obs_nets, rgb_port).backbone = PatchMoeResNet(
+                k=k, exp=exp, patch_size=patch_size, n_blocks_list=n_blocks_list)
+
         if obs_encoder_group_norm:
             # replace batch norm with group norm
             replace_submodules(
@@ -141,8 +136,6 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
                     num_channels=x.num_features)
             )
             
-
-        
         if eval_fixed_crop:
             replace_submodules(
                 root_module=obs_encoder,
@@ -250,7 +243,8 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         """
         assert 'past_action' not in obs_dict # not implemented yet
         # normalize input
-        nobs = self.normalizers[task_id].normalize(obs_dict)
+        # nobs = self.normalizers[task_id].normalize(obs_dict)
+        nobs = obs_dict
         value = next(iter(nobs.values()))
         B, To = value.shape[:2]
         T = self.horizon
@@ -298,7 +292,8 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
         
         # unnormalize prediction
         naction_pred = nsample[...,:Da]
-        action_pred = self.normalizers[task_id]['action'].unnormalize(naction_pred)
+        # action_pred = self.normalizers[task_id]['action'].unnormalize(naction_pred)
+        action_pred = naction_pred
 
         # get action
         if self.pred_action_steps_only:
@@ -420,3 +415,59 @@ class DiffusionTransformerHybridImagePolicy(BaseImagePolicy):
 
     def get_observation_ports(self):
         return self.obs_ports
+    
+    def augment_experts(self, num_experts):
+        moe_module_list = [
+            (name, module) for name, module in self.named_modules()
+            if isinstance(module, TaskMoE)
+        ]
+        for name, module in moe_module_list:
+            new_module = augment_moe(module, num_experts)
+            setattr(self, name, new_module)
+
+
+
+@torch.no_grad()
+def augment_moe(moe: TaskMoE, num_experts: int):
+    if num_experts < moe.num_experts:
+        raise ValueError('Cannot reduce the number of experts')
+    elif num_experts == moe.num_experts:
+        return moe
+    
+    # new TaskMoE
+    new_moe = TaskMoE(
+        input_size=moe.input_size,
+        head_size=moe.head_size,
+        num_experts=num_experts,
+        k=moe.k,
+        w_MI=moe.w_MI,
+        w_H=moe.w_H,
+        w_finetune_MI=moe.w_finetune_MI,
+        limit_k=moe.limit_k,
+        w_topk_loss=moe.w_topk_loss,
+        task_num=moe.task_num,
+        noisy_gating=moe.noisy_gating,
+        gating_activation=moe.gating_activation,
+        **moe.kwargs,
+    )
+
+    # copy the weights from the old MoE to the new MoE
+    new_moe.experts.weight[:moe.num_experts] = moe.experts.weight
+    new_moe.output_experts.weight[:moe.num_experts] = moe.output_experts.weight
+    new_moe.PTE[:, :moe.num_experts] = moe.PTE
+    new_moe.PE[:moe.num_experts] = moe.PE
+    for i, seq in enumerate(moe.f_gate):
+        new_moe.f_gate[i][-1].weight[:moe.num_experts] = seq[-1].weight
+        if seq[-1].bias is not None:
+            new_moe.f_gate[i][-1].bias[:moe.num_experts] = seq[-1].bias
+
+    # initialize the weights of the new experts
+    init_weight_std = 0.01
+    mean_experts_weight = moe.experts.weight.mean(dim=0)
+    new_moe.experts.weight[moe.num_experts:] = \
+        torch.rand_like(new_moe.experts.weight[moe.num_experts:]) * init_weight_std + mean_experts_weight
+    mean_output_experts_weight = moe.output_experts.weight.mean(dim=0)
+    new_moe.output_experts.weight[moe.num_experts:] = \
+        torch.rand_like(new_moe.output_experts.weight[moe.num_experts:]) * init_weight_std + mean_output_experts_weight
+    
+    return new_moe

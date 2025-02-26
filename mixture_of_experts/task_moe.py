@@ -448,8 +448,9 @@ class TaskMoE(MoE):
         self.w_MI = w_MI
         self.w_H = w_H
         self.w_finetune_MI = w_finetune_MI
-
         self.limit_k = max(k, limit_k)
+        self.gating_activation = gating_activation
+        self.kwargs = kwargs
 
         super(TaskMoE, self).__init__(input_size, head_size, num_experts, k, noisy_gating=noisy_gating, gating_activation=gating_activation, **kwargs)
         
@@ -495,6 +496,9 @@ class TaskMoE(MoE):
         top_k_gates, _ = probs.topk(self.k, dim=1)
         self.token_probs[task_bh] = self.token_probs[task_bh] * 0.95 + top_k_gates.mean(0).detach()*0.05
 
+        # a = ((gates > 0).float().sum(0)).detach()*0.05
+        # b = self.task_gate_freq[task_bh]*0.95
+        # print(a, b)
         self.task_gate_freq[task_bh] = self.task_gate_freq[task_bh]*0.95 + ((gates > 0).float().sum(0)).detach()*0.05
 
         self.topk_acc_probs[task_bh] = self.topk_acc_probs[task_bh]*0.95 + (probs.mean(0)).detach()*0.05
@@ -522,7 +526,7 @@ class TaskMoE(MoE):
         PE = self.PTE.sum(0).detach()
 
         # P(E,T) in this batch
-        MI_task_gate = torch.zeros(self.task_num, self.num_experts).cuda()
+        MI_task_gate = torch.zeros(self.task_num, self.num_experts).to(probs.device)
         MI_task_gate[task_bh] = MI_task_gate[task_bh] + probs.mean(0) * PT
 
         # P(E) in this batch

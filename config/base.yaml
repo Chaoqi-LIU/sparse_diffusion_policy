@@ -1,4 +1,4 @@
-_target_: diffusion_policy.workspace.train_diffusion_transformer_hybrid_workspace.TrainDiffusionTransformerHybridWorkspace
+_target_: diffusion_policy.workspace.train_dp_moe.TrainDiffusionTransformerHybridWorkspace
 checkpoint:
   save_last_ckpt: true
   save_last_snapshot: false
@@ -52,7 +52,7 @@ optimizer:
   transformer_weight_decay: 0.001
 past_action_visible: false
 policy:
-  _target_: diffusion_policy.policy.diffusion_transformer_hybrid_image_policy.DiffusionTransformerHybridImagePolicy
+  _target_: diffusion_policy.policy.dp_moe.DiffusionTransformerMoePolicy
   causal_attn: true
   crop_shape:
   - 80 #76
