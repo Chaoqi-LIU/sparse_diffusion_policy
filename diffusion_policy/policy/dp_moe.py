@@ -417,14 +417,35 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
         return self.obs_ports
     
 
+    def report_model_status(self):
+        num_param_total = sum(p.numel() for p in self.parameters())
+        num_param_obs_encoder = sum(p.numel() for p in self.obs_encoder.parameters())
+        num_param_transformer = sum(p.numel() for p in self.model.parameters())
+        num_param_moe = 0
+        for name, module in self.named_modules():
+            if isinstance(module, TaskMoE):
+                num_param_moe += sum(p.numel() for p in module.parameters())
+        print(
+            f"Number of parameters: {num_param_total}\n"
+            f"Number of parameters in obs_encoder: {num_param_obs_encoder}"
+            f" ({num_param_obs_encoder / num_param_total * 100:.2f}%)\n"
+            f"Number of parameters in transformer: {num_param_transformer}"
+            f" ({num_param_transformer / num_param_total * 100:.2f}%)\n"
+            f"Number of parameters in MoE: {num_param_moe}"
+            f" ({num_param_moe / num_param_total * 100:.2f}%)\n"
+        )
+    
+
     def augment_experts(self, num_experts):
         moe_module_list = [
             (name, module) for name, module in self.named_modules()
             if isinstance(module, TaskMoE)
         ]
+        current_num_experts = moe_module_list[0][1].num_experts
         for name, module in moe_module_list:
             new_module = augment_moe(module, num_experts)
             setattr(self, name, new_module)
+        self.num_new_experts = getattr(self, 'num_new_experts', 0) + (num_experts - current_num_experts)
 
 
     def adapt(self, method: str = 'router'):
@@ -433,23 +454,64 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
 
         if method == 'router':
             # unfreeze the router in each moe layer
-            pass
+            self._freeze_all()
+            self._unfreeze_routers()
 
         elif method == 'router+obs_encoder':
             # unfreeze the router in each moe layer and the obs_encoder
-            pass
+            self._freeze_all()
+            self._unfreeze_routers()
+            self._unfreeze_obs_encoder()
 
         elif method == 'router+new_experts':
             # unfreeze the router in each moe layer and the newly added experts
-            pass
+            self._freeze_all()
+            self._unfreeze_routers()
+            # self._unfreeze_new_experts()
+            self._unfreeze_all_experts()
 
         elif method == 'router+obs_encoder+new_experts':
             # unfreeze the router in each moe layer, the obs_encoder, and the newly added experts
-            pass
+            self._freeze_all()
+            self._unfreeze_routers()
+            self._unfreeze_obs_encoder()
+            # self._unfreeze_new_experts()
+            self._unfreeze_all_experts()
 
         elif method == 'full':
             # unfreeze all the parameters
             self.train()
+
+    def _freeze_all(self):
+        self.eval()
+        for param in self.parameters():
+            param.requires_grad_(False)
+
+    def _unfreeze_all(self):
+        self.train()
+        for param in self.parameters():
+            param.requires_grad_(True)
+
+    def _unfreeze_routers(self):
+        for name, module in self.named_modules():
+            if isinstance(module, TaskMoE):
+                for param in module.f_gate.parameters():
+                    param.requires_grad_(True)
+
+    def _unfreeze_obs_encoder(self):
+        for param in self.obs_encoder.parameters():
+            param.requires_grad_(True)
+
+    def _unfreeze_new_experts(self):
+        for name, module in self.named_modules():
+            if isinstance(module, TaskMoE):
+                module.experts.weight.requires_grad_(True)
+                module.experts.weight[:module.num_experts - module.num_new_experts].requires_grad_(False)
+
+    def _unfreeze_all_experts(self):
+        for name, module in self.named_modules():
+            if isinstance(module, TaskMoE):
+                module.requires_grad_(True)
 
 
 
@@ -479,7 +541,11 @@ def augment_moe(moe: TaskMoE, num_experts: int):
 
     # copy the weights from the old MoE to the new MoE
     new_moe.experts.weight[:moe.num_experts] = moe.experts.weight
+    if new_moe.experts.bias is not None:
+        new_moe.experts.bias[:moe.num_experts] = moe.experts.bias
     new_moe.output_experts.weight[:moe.num_experts] = moe.output_experts.weight
+    if new_moe.output_experts.bias is not None:
+        new_moe.output_experts.bias[:moe.num_experts] = moe.output_experts.bias
     new_moe.PTE[:, :moe.num_experts] = moe.PTE
     new_moe.PE[:moe.num_experts] = moe.PE
     for i, seq in enumerate(moe.f_gate):

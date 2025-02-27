@@ -54,6 +54,13 @@ import torch
 #     return policy
 
 
+def print_trainable_param_ratio(net: torch.nn.Module, format: lambda x: x):
+    num_total_params = sum(p.numel() for p in net.parameters())
+    num_trainable_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
+    ratio = num_trainable_params / num_total_params
+    print(format(ratio))
+
+
 
 def main():
     policy = MoEPolicy(
@@ -93,7 +100,7 @@ def main():
         crop_shape=[76, 76],
         obs_encoder_group_norm=True,
         eval_fixed_crop=True,
-        n_layer=1,
+        n_layer=8,
         n_cond_layers=0,
         n_head=4,
         n_emb=256,
@@ -114,7 +121,7 @@ def main():
     }
 
 
-    for _ in range(3):
+    for _ in range(1):
         output = policy.predict_action(input_obs_dict, task_id=0)
     action = output['action']
     print(f"before: {action.shape=}")
@@ -123,11 +130,27 @@ def main():
     # policy = augment_policy(policy, 10)
     policy.augment_experts(12)
 
-
-    for _ in range(3):
+    for _ in range(1):
         output = policy.predict_action(input_obs_dict, task_id=0)
     action = output['action']
     print(f"after: {action.shape=}")
+
+    # policy.report_model_status()
+
+    # print_trainable_param_ratio(policy, lambda x: f"init: {x}")
+    # policy.adapt('full')
+    # print_trainable_param_ratio(policy, lambda x: f"full: {x}")
+    # policy.adapt('router')
+    # print_trainable_param_ratio(policy, lambda x: f"router: {x}")
+    # policy.adapt('router+obs_encoder')
+    # print_trainable_param_ratio(policy, lambda x: f"router+obs_encoder: {x}")
+
+    # # policy.num_new_experts = 8
+
+    # policy.adapt('router+new_experts')
+    # print_trainable_param_ratio(policy, lambda x: f"router+new_experts: {x}")
+    # policy.adapt('router+obs_encoder+new_experts')
+    # print_trainable_param_ratio(policy, lambda x: f"router+obs_encoder+new_experts: {x}")
 
 
 
