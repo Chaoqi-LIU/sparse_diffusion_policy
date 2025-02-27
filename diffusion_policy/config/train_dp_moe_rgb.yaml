@@ -4,8 +4,8 @@ defaults:
 
 task0: ${task}
 
-name: train_diffusion_transformer_hybrid
-_target_: diffusion_policy.workspace.train_dp_moe.TrainDiffusionTransformerHybridWorkspace
+name: train_dp_moe_rgb
+_target_: diffusion_policy.workspace.train_dp_moe.TrainPolicyWorkspace
 
 task_name: ${task.name}
 task_num: 1
@@ -115,7 +115,8 @@ training:
   tqdm_interval_sec: 1.0
 
 logging:
-  project: sparse_diffusion_policy
+  # project: sparse_diffusion_policy
+  project: modular_diffusion_policy   # for wandb report
   resume: True
   mode: online
   name: ${now:%Y%m%d.%H%M%S}_${name}_${task_name}_N${training.num_demo}

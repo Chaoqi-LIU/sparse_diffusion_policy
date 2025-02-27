@@ -33,7 +33,7 @@ from diffusion_policy.dataset.multitask_dataset import MultiDataLoader
 from itertools import zip_longest
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
-class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
+class TrainPolicyWorkspace(BaseWorkspace):
     include_keys = ['global_step', 'epoch']
 
     def __init__(self, cfg: OmegaConf, output_dir=None):
@@ -61,6 +61,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
 
     def run(self):
         cfg = copy.deepcopy(self.cfg)
+        assert cfg.task_num == 1, "Currently we only allow task_num=1"
 
         # resume training
         if cfg.training.resume:   
@@ -260,7 +261,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                     if not lazy_eval:
                         for i, env_runner in enumerate(env_runners):
                             runner_log = env_runner.run(policy,task_id=torch.tensor([i], dtype=torch.int64).to(device))
-                            runner_log = {key + f'_{i}': value for key, value in runner_log.items()}
+                            # runner_log = {key + f'_{i}': value for key, value in runner_log.items()}
                             runner_logs.append(runner_log)
                         for runner_log in runner_logs:
                             step_log.update(runner_log)
@@ -293,14 +294,15 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                         if len(val_losses_list[0]) > 0:
                             for i, val_losses in enumerate(val_losses_list):
                                 val_loss = torch.mean(torch.tensor(val_losses)).item()
-                                step_log[f'val_loss_{i}'] = val_loss
+                                # step_log[f'val_loss_{i}'] = val_loss
+                                step_log['val_loss'] = val_loss
                             # step_log['val_loss3'] = val_loss3
                 # run diffusion sampling on a training batch
                 if (self.epoch % cfg.training.sample_every) == 0:
                     with torch.no_grad():
                         for tag, sample_batches in [
                             ('train_action_mse', train_sampling_batchs),
-                            ('val_action_mse', test_sampling_batchs)
+                            ('test_action_mse', test_sampling_batchs)
                         ]:
                             for i, sample_batch in enumerate(sample_batches):
                                 assert sample_batch is not None
@@ -310,7 +312,8 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                                 result = policy.predict_action(obs_dict,task_id=torch.tensor([i], dtype=torch.int64).to(device))
                                 pred_action = result['action_pred']
                                 mse = torch.nn.functional.mse_loss(pred_action, gt_action)
-                                step_log[f'{tag}_{i}'] = mse.item()
+                                # step_log[f'{tag}_{i}'] = mse.item()
+                                step_log[tag] = mse.item()
                             del batch
                             del obs_dict
                             del gt_action
