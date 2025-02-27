@@ -68,6 +68,9 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
             if lastest_ckpt_path.is_file():
                 print(f"Resuming from checkpoint {lastest_ckpt_path}")
                 self.load_checkpoint(path=lastest_ckpt_path)
+                if self.epoch >= cfg.training.num_epochs:
+                    print("Training already completed")
+                    return
 
         # configure dataset
         datasets: List[BaseImageDataset] = []
@@ -84,7 +87,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
         for train_dataloader in train_dataloaders:
             print("Length of train_dataloader: ", len(train_dataloader))
         multi_traindataloader=MultiDataLoader(train_dataloaders)
-        multi_traindataloader.get_memory_usage()
+        # multi_traindataloader.get_memory_usage()
         # configure validation dataset
         val_datasets=[]
         for dataset in datasets:
@@ -120,11 +123,13 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                 model=self.ema_model)
 
         # configure env
-        env_runners = []
-        # env_runner3: BaseImageRunner
-        for i in range(cfg.task_num):
-            env_runners.append(hydra.utils.instantiate(cfg[f'task{i}'].env_runner, output_dir=self.output_dir))
-            assert isinstance(env_runners[i], BaseImageRunner), type(env_runners[i])
+        lazy_eval = cfg.task.lazy_eval
+        if not lazy_eval:
+            env_runners = []
+            # env_runner3: BaseImageRunner
+            for i in range(cfg.task_num):
+                env_runners.append(hydra.utils.instantiate(cfg[f'task{i}'].env_runner, output_dir=self.output_dir))
+                assert isinstance(env_runners[i], BaseImageRunner), type(env_runners[i])
 
 
         # configure logging
@@ -160,7 +165,9 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
         train_sampling_batchs = []
         for i in range(cfg.task_num):
             train_sampling_batchs.append(None)
-        # train_sampling_batch3 = None
+        test_sampling_batchs = []
+        for i in range(cfg.task_num):
+            test_sampling_batchs.append(None)
 
         if cfg.training.debug:
             cfg.training.num_epochs = 2
@@ -174,7 +181,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
         # training loop
         log_path = os.path.join(self.output_dir, 'logs.json.txt')
         with JsonLogger(log_path) as json_logger:
-            for local_epoch_idx in range(cfg.training.num_epochs):
+            while self.epoch < cfg.training.num_epochs:
                 step_log = dict()
                 # ========= train for this epoch ==========
                 train_losses = list()
@@ -190,11 +197,10 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                         assert assigned_task_id == multi_traindataloader.loader_idx
                         if batch is None:
                             continue
+                        if train_sampling_batchs[assigned_task_id] is None:
+                            train_sampling_batchs[assigned_task_id] = batch
                         batch = dict_apply(batch, lambda x: x.to(device, non_blocking=True))
                         task_id = torch.tensor([assigned_task_id], dtype=torch.int64).to(device)
-                        if train_sampling_batchs[assigned_task_id] is None:
-                            print("Assigning train_sampling_batch with task_id: ", assigned_task_id)
-                            train_sampling_batchs[assigned_task_id] = batch
                 
 
                         # compute loss
@@ -251,12 +257,16 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                 # run rollout
                 runner_logs = []
                 if (self.epoch % cfg.training.rollout_every) == 0:
-                    for i, env_runner in enumerate(env_runners):
-                        runner_log = env_runner.run(policy,task_id=torch.tensor([i], dtype=torch.int64).to(device))
-                        runner_log = {key + f'_{i}': value for key, value in runner_log.items()}
-                        runner_logs.append(runner_log)
-                    for runner_log in runner_logs:
-                        step_log.update(runner_log)
+                    if not lazy_eval:
+                        for i, env_runner in enumerate(env_runners):
+                            runner_log = env_runner.run(policy,task_id=torch.tensor([i], dtype=torch.int64).to(device))
+                            runner_log = {key + f'_{i}': value for key, value in runner_log.items()}
+                            runner_logs.append(runner_log)
+                        for runner_log in runner_logs:
+                            step_log.update(runner_log)
+                    else:
+                        step_log[topk_manager.monitor_key] = self.epoch / cfg.training.num_epochs
+                        
                 # run validation
                 if (self.epoch % cfg.training.val_every) == 0:
                     with torch.no_grad():
@@ -268,9 +278,12 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                         with tqdm.tqdm(zip_val_dataloaders, desc=f"Validation epoch {self.epoch}", 
                                 leave=False, mininterval=cfg.training.tqdm_interval_sec) as tepoch:
                             for batch_idx, batches in enumerate(tepoch):
+                                assigned_task_id = batch_idx%cfg.task_num
                                 for i, batch in enumerate(batches):
                                     if batch is None:
                                         continue
+                                    if test_sampling_batchs[assigned_task_id] is None:
+                                        test_sampling_batchs[assigned_task_id] = batch
                                     batch = dict_apply(batch, lambda x: x.to(device, non_blocking=True))
                                     loss = self.model.compute_loss(batch,task_id=torch.tensor([i], dtype=torch.int64).to(device))
                                     val_losses_list[i].append(loss)
@@ -285,15 +298,19 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                 # run diffusion sampling on a training batch
                 if (self.epoch % cfg.training.sample_every) == 0:
                     with torch.no_grad():
-                        for i, train_sampling_batch in enumerate(train_sampling_batchs):
-                            assert train_sampling_batch is not None
-                            batch = dict_apply(train_sampling_batch, lambda x: x.to(device, non_blocking=True))
-                            obs_dict = batch['obs']
-                            gt_action = batch['action']
-                            result = policy.predict_action(obs_dict,task_id=torch.tensor([i], dtype=torch.int64).to(device))
-                            pred_action = result['action_pred'] 
-                            mse = torch.nn.functional.mse_loss(pred_action, gt_action)
-                            step_log[f'train_action_mse_error_{i}'] = mse.item()
+                        for tag, sample_batches in [
+                            ('train_action_mse', train_sampling_batchs),
+                            ('val_action_mse', test_sampling_batchs)
+                        ]:
+                            for i, sample_batch in enumerate(sample_batches):
+                                assert sample_batch is not None
+                                batch = dict_apply(sample_batch, lambda x: x.to(device, non_blocking=True))
+                                obs_dict = batch['obs']
+                                gt_action = batch['action']
+                                result = policy.predict_action(obs_dict,task_id=torch.tensor([i], dtype=torch.int64).to(device))
+                                pred_action = result['action_pred']
+                                mse = torch.nn.functional.mse_loss(pred_action, gt_action)
+                                step_log[f'{tag}_{i}'] = mse.item()
                             del batch
                             del obs_dict
                             del gt_action

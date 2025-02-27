@@ -1,4 +1,4 @@
-from diffusion_policy.env.metaworld.metaworld_wrapper import MetaworldEnv
+from diffusion_policy.env.metaworld.env import MetaworldEnv
 from typing import Optional, List
 
 

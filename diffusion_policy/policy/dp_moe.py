@@ -416,6 +416,7 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
     def get_observation_ports(self):
         return self.obs_ports
     
+
     def augment_experts(self, num_experts):
         moe_module_list = [
             (name, module) for name, module in self.named_modules()
@@ -424,6 +425,31 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
         for name, module in moe_module_list:
             new_module = augment_moe(module, num_experts)
             setattr(self, name, new_module)
+
+
+    def adapt(self, method: str = 'router'):
+        # this function is used in lieu of the `train()` function in
+        # the training loop
+
+        if method == 'router':
+            # unfreeze the router in each moe layer
+            pass
+
+        elif method == 'router+obs_encoder':
+            # unfreeze the router in each moe layer and the obs_encoder
+            pass
+
+        elif method == 'router+new_experts':
+            # unfreeze the router in each moe layer and the newly added experts
+            pass
+
+        elif method == 'router+obs_encoder+new_experts':
+            # unfreeze the router in each moe layer, the obs_encoder, and the newly added experts
+            pass
+
+        elif method == 'full':
+            # unfreeze all the parameters
+            self.train()
 
 
 

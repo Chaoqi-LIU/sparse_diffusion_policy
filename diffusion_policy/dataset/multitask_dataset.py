@@ -32,7 +32,7 @@ class MultiDataLoader:
             iter(data_loader) for data_loader in self.dataloaders
         ]
         self.current_batch_idx = 0
-        self.get_memory_usage()
+        # self.get_memory_usage()
     
     def __next__(self):
         if self.current_batch_idx >= self.max_loader_length:
