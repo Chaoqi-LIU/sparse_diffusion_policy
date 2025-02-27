@@ -111,29 +111,31 @@ def main():
         obs_as_cond=True,
     )
     # print(policy)
+    policy.report_model_status()
 
 
-    batch_size = 4
-    input_obs_dict = {
-        'corner2_rgb': torch.randn(batch_size, 2, 3, 128, 128),
-        'behindGripper_rgb': torch.randn(batch_size, 2, 3, 128, 128),
-        'agent_pos': torch.randn(batch_size, 2, 9),
-    }
+    # batch_size = 4
+    # input_obs_dict = {
+    #     'corner2_rgb': torch.randn(batch_size, 2, 3, 128, 128),
+    #     'behindGripper_rgb': torch.randn(batch_size, 2, 3, 128, 128),
+    #     'agent_pos': torch.randn(batch_size, 2, 9),
+    # }
 
 
-    for _ in range(1):
-        output = policy.predict_action(input_obs_dict, task_id=0)
-    action = output['action']
-    print(f"before: {action.shape=}")
+    # for _ in range(3):
+    #     output = policy.predict_action(input_obs_dict, task_id=0)
+    # action = output['action']
+    # print(f"before: {action.shape=}")
 
     
     # policy = augment_policy(policy, 10)
     policy.augment_experts(12)
+    policy.report_model_status()
 
-    for _ in range(1):
-        output = policy.predict_action(input_obs_dict, task_id=0)
-    action = output['action']
-    print(f"after: {action.shape=}")
+    # for _ in range(3):
+    #     output = policy.predict_action(input_obs_dict, task_id=0)
+    # action = output['action']
+    # print(f"after: {action.shape=}")
 
     # policy.report_model_status()
 

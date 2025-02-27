@@ -443,8 +443,9 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
         ]
         current_num_experts = moe_module_list[0][1].num_experts
         for name, module in moe_module_list:
-            new_module = augment_moe(module, num_experts)
-            setattr(self, name, new_module)
+            # new_module = augment_moe(module, num_experts)
+            # setattr(self, name, new_module)
+            augment_moe(module, num_experts)
         self.num_new_experts = getattr(self, 'num_new_experts', 0) + (num_experts - current_num_experts)
 
 
@@ -515,6 +516,57 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
 
 
 
+# @torch.no_grad()
+# def augment_moe(moe: TaskMoE, num_experts: int):
+#     if num_experts < moe.num_experts:
+#         raise ValueError('Cannot reduce the number of experts')
+#     elif num_experts == moe.num_experts:
+#         return moe
+    
+#     # new TaskMoE
+#     new_moe = TaskMoE(
+#         input_size=moe.input_size,
+#         head_size=moe.head_size,
+#         num_experts=num_experts,
+#         k=moe.k,
+#         w_MI=moe.w_MI,
+#         w_H=moe.w_H,
+#         w_finetune_MI=moe.w_finetune_MI,
+#         limit_k=moe.limit_k,
+#         w_topk_loss=moe.w_topk_loss,
+#         task_num=moe.task_num,
+#         noisy_gating=moe.noisy_gating,
+#         gating_activation=moe.gating_activation,
+#         **moe.kwargs,
+#     )
+
+#     # copy the weights from the old MoE to the new MoE
+#     new_moe.experts.weight[:moe.num_experts] = moe.experts.weight
+#     if new_moe.experts.bias is not None:
+#         new_moe.experts.bias[:moe.num_experts] = moe.experts.bias
+#     new_moe.output_experts.weight[:moe.num_experts] = moe.output_experts.weight
+#     if new_moe.output_experts.bias is not None:
+#         new_moe.output_experts.bias[:moe.num_experts] = moe.output_experts.bias
+#     new_moe.PTE[:, :moe.num_experts] = moe.PTE
+#     new_moe.PE[:moe.num_experts] = moe.PE
+#     for i, seq in enumerate(moe.f_gate):
+#         new_moe.f_gate[i][-1].weight[:moe.num_experts] = seq[-1].weight
+#         if seq[-1].bias is not None:
+#             new_moe.f_gate[i][-1].bias[:moe.num_experts] = seq[-1].bias
+
+#     # initialize the weights of the new experts
+#     init_weight_std = 0.01
+#     mean_experts_weight = moe.experts.weight.mean(dim=0)
+#     new_moe.experts.weight[moe.num_experts:] = \
+#         torch.rand_like(new_moe.experts.weight[moe.num_experts:]) * init_weight_std + mean_experts_weight
+#     mean_output_experts_weight = moe.output_experts.weight.mean(dim=0)
+#     new_moe.output_experts.weight[moe.num_experts:] = \
+#         torch.rand_like(new_moe.output_experts.weight[moe.num_experts:]) * init_weight_std + mean_output_experts_weight
+    
+#     return new_moe
+
+
+
 @torch.no_grad()
 def augment_moe(moe: TaskMoE, num_experts: int):
     if num_experts < moe.num_experts:
@@ -522,44 +574,59 @@ def augment_moe(moe: TaskMoE, num_experts: int):
     elif num_experts == moe.num_experts:
         return moe
     
-    # new TaskMoE
-    new_moe = TaskMoE(
-        input_size=moe.input_size,
-        head_size=moe.head_size,
-        num_experts=num_experts,
-        k=moe.k,
-        w_MI=moe.w_MI,
-        w_H=moe.w_H,
-        w_finetune_MI=moe.w_finetune_MI,
-        limit_k=moe.limit_k,
-        w_topk_loss=moe.w_topk_loss,
-        task_num=moe.task_num,
-        noisy_gating=moe.noisy_gating,
-        gating_activation=moe.gating_activation,
-        **moe.kwargs,
-    )
+    # misc buffer update
+    old_PTE = moe.PTE.clone()
+    moe.PTE = torch.zeros(moe.task_num, num_experts)
+    moe.PTE[:, :moe.num_experts] = old_PTE
+    old_PE = moe.PE.clone()
+    moe.PE = torch.zeros(num_experts)
+    moe.PE[:moe.num_experts] = old_PE
 
-    # copy the weights from the old MoE to the new MoE
-    new_moe.experts.weight[:moe.num_experts] = moe.experts.weight
-    if new_moe.experts.bias is not None:
-        new_moe.experts.bias[:moe.num_experts] = moe.experts.bias
-    new_moe.output_experts.weight[:moe.num_experts] = moe.output_experts.weight
-    if new_moe.output_experts.bias is not None:
-        new_moe.output_experts.bias[:moe.num_experts] = moe.output_experts.bias
-    new_moe.PTE[:, :moe.num_experts] = moe.PTE
-    new_moe.PE[:moe.num_experts] = moe.PE
-    for i, seq in enumerate(moe.f_gate):
-        new_moe.f_gate[i][-1].weight[:moe.num_experts] = seq[-1].weight
-        if seq[-1].bias is not None:
-            new_moe.f_gate[i][-1].bias[:moe.num_experts] = seq[-1].bias
-
-    # initialize the weights of the new experts
+    # experts update
     init_weight_std = 0.01
-    mean_experts_weight = moe.experts.weight.mean(dim=0)
-    new_moe.experts.weight[moe.num_experts:] = \
-        torch.rand_like(new_moe.experts.weight[moe.num_experts:]) * init_weight_std + mean_experts_weight
-    mean_output_experts_weight = moe.output_experts.weight.mean(dim=0)
-    new_moe.output_experts.weight[moe.num_experts:] = \
-        torch.rand_like(new_moe.output_experts.weight[moe.num_experts:]) * init_weight_std + mean_output_experts_weight
-    
-    return new_moe
+
+    old_experts_weight = moe.experts.weight.clone()
+    moe.experts.weight = nn.Parameter(torch.zeros(num_experts, moe.input_size, moe.head_size))
+    moe.experts.weight[:moe.num_experts] = old_experts_weight
+    moe.experts.weight[moe.num_experts:] = (
+        torch.rand_like(moe.experts.weight[moe.num_experts:]) * init_weight_std 
+        + old_experts_weight.mean(dim=0)
+    )
+    if moe.experts.bias is not None:
+        old_experts_bias = moe.experts.bias.clone()
+        moe.experts.bias = nn.Parameter(torch.zeros(num_experts, moe.head_size))
+        moe.experts.bias[:moe.num_experts] = old_experts_bias
+
+    old_output_experts_weight = moe.output_experts.weight.clone()
+    moe.output_experts.weight = nn.Parameter(torch.zeros(num_experts, moe.head_size, moe.input_size))
+    moe.output_experts.weight[:moe.num_experts] = old_output_experts_weight
+    moe.output_experts.weight[moe.num_experts:] = (
+        torch.rand_like(moe.output_experts.weight[moe.num_experts:]) * init_weight_std 
+        + old_output_experts_weight.mean(dim=0)
+    )
+    if moe.output_experts.bias is not None:
+        old_output_experts_bias = moe.output_experts.bias.clone()
+        moe.output_experts.bias = nn.Parameter(torch.zeros(num_experts, moe.input_size))
+        moe.output_experts.bias[:moe.num_experts] = old_output_experts_bias
+
+    # router update
+    for i, seq in enumerate(moe.f_gate):
+        old_linear_weight = seq[-1].weight.clone()
+        moe.f_gate[i][-1].weight = nn.Parameter(torch.zeros(num_experts, old_linear_weight.size(1)))
+        moe.f_gate[i][-1].weight[:moe.num_experts] = old_linear_weight
+        moe.f_gate[i][-1].weight[moe.num_experts:] = (
+            torch.rand_like(moe.f_gate[i][-1].weight[moe.num_experts:]) * init_weight_std 
+            + old_linear_weight.mean(dim=0)
+        )
+        if seq[-1].bias is not None:
+            old_linear_bias = seq[-1].bias.clone()
+            moe.f_gate[i][-1].bias = nn.Parameter(torch.zeros(num_experts))
+            moe.f_gate[i][-1].bias[:moe.num_experts] = old_linear_bias
+
+    # attr update
+    moe.num_experts = num_experts
+    moe.task_gate_freq = [0] * moe.task_num
+    moe.topk_acc_probs = [0] * moe.task_num
+    moe.token_probs = [0] * moe.task_num
+
+    return moe
