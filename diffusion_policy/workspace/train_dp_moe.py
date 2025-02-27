@@ -65,10 +65,11 @@ class TrainPolicyWorkspace(BaseWorkspace):
 
         # resume training
         if cfg.training.resume:   
-            lastest_ckpt_path = pathlib.Path("")
+            lastest_ckpt_path = self.get_checkpoint_path()
             if lastest_ckpt_path.is_file():
                 print(f"Resuming from checkpoint {lastest_ckpt_path}")
                 self.load_checkpoint(path=lastest_ckpt_path)
+                print(f"{self.epoch=}, {self.global_step=}")
                 if self.epoch >= cfg.training.num_epochs:
                     print("Training already completed")
                     return
@@ -84,9 +85,11 @@ class TrainPolicyWorkspace(BaseWorkspace):
         for dataset in datasets:
             train_dataloaders.append(DataLoader(dataset, **cfg.dataloader))
             normalizers.append(dataset.get_normalizer())
+        assert len(train_dataloaders) == cfg.task_num
         max_train_dataloader_len = max([len(train_dataloader) for train_dataloader in train_dataloaders])
         for train_dataloader in train_dataloaders:
             print("Length of train_dataloader: ", len(train_dataloader))
+        print(f"max_train_dataloader_len: {max_train_dataloader_len}")
         multi_traindataloader=MultiDataLoader(train_dataloaders)
         # multi_traindataloader.get_memory_usage()
         # configure validation dataset
@@ -334,12 +337,13 @@ class TrainPolicyWorkspace(BaseWorkspace):
                     for key, value in step_log.items():
                         new_key = key.replace('/', '_')
                         metric_dict[new_key] = value
-                    sum=0
-                    for key in metric_dict.keys():
-                        # if start with cfg.checkpoint.topk.monitor_key, then sum up
-                        if key.startswith(cfg.checkpoint.topk.monitor_key):
-                            sum+=metric_dict[key]
-                    metric_dict[cfg.checkpoint.topk.monitor_key] = sum
+     
+                    # sum=0
+                    # for key in metric_dict.keys():
+                    #     # if start with cfg.checkpoint.topk.monitor_key, then sum up
+                    #     if key.startswith(cfg.checkpoint.topk.monitor_key):
+                    #         sum+=metric_dict[key]
+                    # metric_dict[cfg.checkpoint.topk.monitor_key] = sum
                     
                     # We can't copy the last checkpoint here
                     # since save_checkpoint uses threads.
@@ -348,6 +352,10 @@ class TrainPolicyWorkspace(BaseWorkspace):
 
                     if topk_ckpt_path is not None:
                         self.save_checkpoint(path=topk_ckpt_path)
+                        if lazy_eval:
+                            step_log.pop(topk_manager.monitor_key)
+                            print('removed: ', topk_manager.monitor_key)
+
                 # ========= eval end for this epoch ==========
                 policy.train()
 

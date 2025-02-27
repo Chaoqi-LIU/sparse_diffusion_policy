@@ -115,8 +115,8 @@ training:
   tqdm_interval_sec: 1.0
 
 logging:
-  # project: sparse_diffusion_policy
-  project: modular_diffusion_policy   # for wandb report
+  project: sparse_diffusion_policy
+  # project: modular_policy_debug   # for wandb report
   resume: True
   mode: online
   name: ${now:%Y%m%d.%H%M%S}_${name}_${task_name}_N${training.num_demo}
