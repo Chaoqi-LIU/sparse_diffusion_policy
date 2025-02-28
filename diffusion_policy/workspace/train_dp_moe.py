@@ -354,7 +354,6 @@ class TrainPolicyWorkspace(BaseWorkspace):
                         self.save_checkpoint(path=topk_ckpt_path)
                         if lazy_eval:
                             step_log.pop(topk_manager.monitor_key)
-                            print('removed: ', topk_manager.monitor_key)
 
                 # ========= eval end for this epoch ==========
                 policy.train()

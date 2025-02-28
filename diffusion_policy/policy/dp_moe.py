@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -172,6 +173,10 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
             obs_as_cond=obs_as_cond,
             n_cond_layers=n_cond_layers
         )
+        for module in model.modules():
+            if isinstance(module, TaskMoE):
+                self.num_experts = module.num_experts
+                break
 
         self.obs_encoder = obs_encoder
         self.model = model
@@ -422,9 +427,14 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
         num_param_obs_encoder = sum(p.numel() for p in self.obs_encoder.parameters())
         num_param_transformer = sum(p.numel() for p in self.model.parameters())
         num_param_moe = 0
+        num_param_experts = 0
+        num_param_router = 0
         for name, module in self.named_modules():
             if isinstance(module, TaskMoE):
                 num_param_moe += sum(p.numel() for p in module.parameters())
+                num_param_experts += sum(p.numel() for p in module.experts.parameters())
+                num_param_experts += sum(p.numel() for p in module.output_experts.parameters())
+                num_param_router += sum(p.numel() for p in module.f_gate.parameters())
         print(
             f"Number of parameters: {num_param_total}\n"
             f"Number of parameters in obs_encoder: {num_param_obs_encoder}"
@@ -433,6 +443,10 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
             f" ({num_param_transformer / num_param_total * 100:.2f}%)\n"
             f"Number of parameters in MoE: {num_param_moe}"
             f" ({num_param_moe / num_param_total * 100:.2f}%)\n"
+            f"Number of parameters in experts: {num_param_experts}"
+            f" ({num_param_experts / num_param_total * 100:.2f}%)\n"
+            f"Number of parameters in routers: {num_param_router}"
+            f" ({num_param_router / num_param_total * 100:.2f}%)\n"
         )
     
 
@@ -441,12 +455,10 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
             (name, module) for name, module in self.named_modules()
             if isinstance(module, TaskMoE)
         ]
-        current_num_experts = moe_module_list[0][1].num_experts
         for name, module in moe_module_list:
-            # new_module = augment_moe(module, num_experts)
-            # setattr(self, name, new_module)
             augment_moe(module, num_experts)
-        self.num_new_experts = getattr(self, 'num_new_experts', 0) + (num_experts - current_num_experts)
+        self.num_new_experts = getattr(self, 'num_new_experts', 0) + (num_experts - self.num_experts)
+        self.num_experts = num_experts
 
 
     def adapt(self, method: str = 'router'):
@@ -468,20 +480,39 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
             # unfreeze the router in each moe layer and the newly added experts
             self._freeze_all()
             self._unfreeze_routers()
-            # self._unfreeze_new_experts()
-            self._unfreeze_all_experts()
+            self._unfreeze_all_experts()    # HACK: we will wipe out the gradients of the old experts
 
         elif method == 'router+obs_encoder+new_experts':
             # unfreeze the router in each moe layer, the obs_encoder, and the newly added experts
             self._freeze_all()
             self._unfreeze_routers()
             self._unfreeze_obs_encoder()
-            # self._unfreeze_new_experts()
-            self._unfreeze_all_experts()
+            self._unfreeze_all_experts()    # HACK: we will wipe out the gradients of the old experts
 
         elif method == 'full':
             # unfreeze all the parameters
             self.train()
+
+    def zero_out_old_experts_grad(self) -> int:
+        self.num_new_experts = getattr(self, 'num_new_experts', 0)
+        num_zeroed = 0
+        for module in self.modules():
+            if isinstance(module, TaskMoE):
+                assert module.experts.weight.requires_grad
+                module.experts.weight.grad[:module.num_experts - self.num_new_experts].zero_()
+                num_zeroed += math.prod(module.experts.weight.grad[:module.num_experts - self.num_new_experts].shape)
+                if module.experts.bias is not None:
+                    assert module.experts.bias.requires_grad
+                    module.experts.bias.grad[:module.num_experts - self.num_new_experts].zero_()
+                    num_zeroed += math.prod(module.experts.bias.grad[:module.num_experts - self.num_new_experts].shape)
+                assert module.output_experts.weight.requires_grad
+                module.output_experts.weight.grad[:module.num_experts - self.num_new_experts].zero_()
+                num_zeroed += math.prod(module.output_experts.weight.grad[:module.num_experts - self.num_new_experts].shape)
+                if module.output_experts.bias is not None:
+                    assert module.output_experts.bias.requires_grad
+                    module.output_experts.bias.grad[:module.num_experts - self.num_new_experts].zero_()
+                    num_zeroed += math.prod(module.output_experts.bias.grad[:module.num_experts - self.num_new_experts].shape)
+        return num_zeroed
 
     def _freeze_all(self):
         self.eval()
@@ -503,67 +534,17 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
         for param in self.obs_encoder.parameters():
             param.requires_grad_(True)
 
-    def _unfreeze_new_experts(self):
-        for name, module in self.named_modules():
-            if isinstance(module, TaskMoE):
-                module.experts.weight.requires_grad_(True)
-                module.experts.weight[:module.num_experts - module.num_new_experts].requires_grad_(False)
+    # def _unfreeze_new_experts(self):
+    #     for name, module in self.named_modules():
+    #         if isinstance(module, TaskMoE):
+    #             module.experts.weight.requires_grad_(True)
+    #             module.experts.weight[:module.num_experts - module.num_new_experts].requires_grad_(False)
 
     def _unfreeze_all_experts(self):
         for name, module in self.named_modules():
             if isinstance(module, TaskMoE):
-                module.requires_grad_(True)
-
-
-
-# @torch.no_grad()
-# def augment_moe(moe: TaskMoE, num_experts: int):
-#     if num_experts < moe.num_experts:
-#         raise ValueError('Cannot reduce the number of experts')
-#     elif num_experts == moe.num_experts:
-#         return moe
-    
-#     # new TaskMoE
-#     new_moe = TaskMoE(
-#         input_size=moe.input_size,
-#         head_size=moe.head_size,
-#         num_experts=num_experts,
-#         k=moe.k,
-#         w_MI=moe.w_MI,
-#         w_H=moe.w_H,
-#         w_finetune_MI=moe.w_finetune_MI,
-#         limit_k=moe.limit_k,
-#         w_topk_loss=moe.w_topk_loss,
-#         task_num=moe.task_num,
-#         noisy_gating=moe.noisy_gating,
-#         gating_activation=moe.gating_activation,
-#         **moe.kwargs,
-#     )
-
-#     # copy the weights from the old MoE to the new MoE
-#     new_moe.experts.weight[:moe.num_experts] = moe.experts.weight
-#     if new_moe.experts.bias is not None:
-#         new_moe.experts.bias[:moe.num_experts] = moe.experts.bias
-#     new_moe.output_experts.weight[:moe.num_experts] = moe.output_experts.weight
-#     if new_moe.output_experts.bias is not None:
-#         new_moe.output_experts.bias[:moe.num_experts] = moe.output_experts.bias
-#     new_moe.PTE[:, :moe.num_experts] = moe.PTE
-#     new_moe.PE[:moe.num_experts] = moe.PE
-#     for i, seq in enumerate(moe.f_gate):
-#         new_moe.f_gate[i][-1].weight[:moe.num_experts] = seq[-1].weight
-#         if seq[-1].bias is not None:
-#             new_moe.f_gate[i][-1].bias[:moe.num_experts] = seq[-1].bias
-
-#     # initialize the weights of the new experts
-#     init_weight_std = 0.01
-#     mean_experts_weight = moe.experts.weight.mean(dim=0)
-#     new_moe.experts.weight[moe.num_experts:] = \
-#         torch.rand_like(new_moe.experts.weight[moe.num_experts:]) * init_weight_std + mean_experts_weight
-#     mean_output_experts_weight = moe.output_experts.weight.mean(dim=0)
-#     new_moe.output_experts.weight[moe.num_experts:] = \
-#         torch.rand_like(new_moe.output_experts.weight[moe.num_experts:]) * init_weight_std + mean_output_experts_weight
-    
-#     return new_moe
+                module.experts.requires_grad_(True)
+                module.output_experts.requires_grad_(True)
 
 
 

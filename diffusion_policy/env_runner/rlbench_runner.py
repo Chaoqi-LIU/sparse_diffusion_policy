@@ -152,7 +152,7 @@ class RlbenchRunner(BaseImageRunner):
 
 
     @torch.inference_mode()
-    def run(self, policy: BaseImagePolicy):
+    def run(self, policy: BaseImagePolicy, task_id):
         device = policy.device
         dtype = policy.dtype
         policy_name = policy.get_policy_name()
@@ -211,7 +211,7 @@ class RlbenchRunner(BaseImageRunner):
                     action = policy.predict_action({
                         port: obs_dict[port] 
                         for port in policy.get_observation_ports()
-                    })['action'].detach().cpu().numpy()
+                    }, task_id)['action'].detach().cpu().numpy()
 
                 if not np.all(np.isfinite(action)):
                     raise RuntimeError("NaN of Inf action")

@@ -1,0 +1,55 @@
+defaults:
+  - _self_
+  - task: ???
+
+name: adapt_dp_moe_rgb
+_target_: diffusion_policy.workspace.adapt_dp_moe.AdaptMoePolicyWorkspace
+model_path: ???
+
+training:
+  num_demo: ???
+  num_epochs: 1001
+  resume: True
+
+policy:
+  adapt_method: router+obs_encoder  # TODO: ideally reflect this in name
+
+horizon: 16
+n_obs_steps: 2
+n_action_steps: 8
+dataset_obs_steps: ${n_obs_steps}
+keypoint_visible_rate: 1.0
+task_name: ${task.name}
+exp_name: "default"
+
+logging:
+  project: sparse_diffusion_policy
+  # project: modular_policy_debug   # for wandb report
+  resume: True
+  mode: online
+  name: ${now:%Y%m%d.%H%M%S}_${name}_${task_name}_N${training.num_demo}
+  tags: ["${name}", "${task_name}", "${exp_name}"]
+  id: null
+  group: null
+
+checkpoint:
+  topk:
+    monitor_key: mean_success_rate
+    mode: max
+    k: 5
+    format_str: 'ep-{epoch:04d}_sr-{mean_success_rate:.3f}.ckpt'
+  save_last_ckpt: True
+  save_last_snapshot: False
+
+multi_run:
+  run_dir: output/${now:%Y%m%d}/${now:%H%M%S}_${name}_${task_name}_N${training.num_demo}
+  wandb_name_base: ${now:%Y%m%d.%H%M%S}_${name}_${task_name}_N${training.num_demo}
+
+hydra:
+  job:
+    override_dirname: ${name}
+  run:
+    dir: output/${now:%Y%m%d}/${now:%H%M%S}_${name}_${task_name}_N${training.num_demo}
+  sweep:
+    dir: output/${now:%Y%m%d}/${now:%H%M%S}_${name}_${task_name}_N${training.num_demo}
+    subdir: ${hydra.job.num}
