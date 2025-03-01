@@ -248,8 +248,7 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
         """
         assert 'past_action' not in obs_dict # not implemented yet
         # normalize input
-        # nobs = self.normalizers[task_id].normalize(obs_dict)
-        nobs = obs_dict
+        nobs = self.normalizers[task_id].normalize(obs_dict)
         value = next(iter(nobs.values()))
         B, To = value.shape[:2]
         T = self.horizon
@@ -297,8 +296,7 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
         
         # unnormalize prediction
         naction_pred = nsample[...,:Da]
-        # action_pred = self.normalizers[task_id]['action'].unnormalize(naction_pred)
-        action_pred = naction_pred
+        action_pred = self.normalizers[task_id]['action'].unnormalize(naction_pred)
 
         # get action
         if self.pred_action_steps_only:
