@@ -44,7 +44,7 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy.dataset.rlbench_dataset.RlbenchDataset
-  zarr_path: data/rlbench_mt4_expert_${training.num_demo}.zarr
+  zarr_path: data/rlbench/mt4_expert_${training.num_demo}.zarr
   obs_keys:
     - front_rgb
     - wrist_rgb

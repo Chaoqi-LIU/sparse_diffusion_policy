@@ -3,24 +3,19 @@ from typing import Optional, List
 
 
 MT_TASKS = {
-    'mt5': [
+    'mt4': [
         'door-close',
         'drawer-close',
         'disassemble',
         'window-open',
-        'soccer',
     ],
-    'mt10': [
-        'button-press',
+    'mt6': [
         'door-open',
-        'assembly',
         'drawer-open',
-        'peg-insert-side',
-        'pick-place',
-        'reach',
+        'assembly',
         'window-close',
-        'basketball',
-        'shelf-place',
+        'peg-insert-side',
+        'hammer',
     ],
 }
 

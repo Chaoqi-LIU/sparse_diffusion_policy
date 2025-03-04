@@ -1,6 +1,6 @@
-name: mw-mt10
+name: mw-mt6
 
-task_name: mw-mt10
+task_name: mw-mt6
 lazy_eval: False
 
 shape_meta: &shape_meta
@@ -20,7 +20,7 @@ shape_meta: &shape_meta
 
 env_runner:
   _target_: diffusion_policy.env_runner.metaworld_runner.MetaworldRunner
-  task_name: mt10
+  task_name: mt6
   n_test: 100
   n_test_vis: 10
   n_obs_steps: ${n_obs_steps}
@@ -36,7 +36,7 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy.dataset.metaworld_dataset.MetaworldDataset
-  zarr_path: data/metaworld_mt10_expert_100.zarr
+  zarr_path: data/metaworld/mt6_expert_100.zarr
   obs_keys:
     - corner2_rgb
     - behindGripper_rgb

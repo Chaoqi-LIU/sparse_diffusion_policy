@@ -150,7 +150,6 @@ class MetaworldRunner(BaseImageRunner):
 
         # allocate data
         all_video_paths = [None] * n_inits
-        all_rewards = [0] * n_inits
         all_success = [False] * n_inits
 
         for chunk_idx in range(n_chunks):
@@ -216,35 +215,24 @@ class MetaworldRunner(BaseImageRunner):
 
             # collect data for this round
             all_video_paths[this_global_slice] = self.env.render()[this_local_slice]
-            all_rewards[this_global_slice] = self.env.call('get_attr', 'reward')[this_local_slice]
 
         # clear out video buffer
         _ = self.env.reset()
 
         # log
-        total_rewards = list()
         log_data = dict()
 
         for task_name in set(self.env_task_names):
-            task_rewards = [
-                all_rewards[i] 
-                for i in range(n_inits) 
-                if self.env_task_names[i] == task_name
-            ]
             task_success = [
                 all_success[i] 
                 for i in range(n_inits) 
                 if self.env_task_names[i] == task_name
             ]
-            log_data[f"{task_name}/mean_total_reward"] = np.mean(task_rewards)
             log_data[f"{task_name}/mean_success_rate"] = np.mean(task_success)
         
         for i in range(n_inits):
             seed = self.env_seeds[i]
             task_name = self.env_task_names[i]
-            total_reward = np.sum(all_rewards[i])
-            total_rewards.append(total_reward)
-            log_data[f"{task_name}/reward_{seed}"] = total_reward
 
             # visualize sim
             video_path = all_video_paths[i]
@@ -253,7 +241,6 @@ class MetaworldRunner(BaseImageRunner):
                 log_data[f"{task_name}/video_{seed}"] = video
             
         # log aggregate metrics
-        log_data['mean_total_reward'] = np.mean(total_rewards)
         log_data['mean_success_rate'] = np.mean(all_success)
 
         return log_data

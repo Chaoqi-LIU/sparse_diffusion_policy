@@ -229,7 +229,9 @@ class MetaworldEnv(gym.Env):
         obs_dict = self.get_obs_dict()
         if self.oracle:
             obs_dict['full_state'] = full_state
-        done = done or self.cur_step >= self.episode_length
+        if info['success']:
+            self.succ_step += 1
+        done = done or (self.cur_step >= self.episode_length) or (self.succ_step >= 10)
         return obs_dict, reward, done, info
     
     def reset(self) -> Dict[str, np.ndarray]:
@@ -238,6 +240,7 @@ class MetaworldEnv(gym.Env):
         full_state = self.env.reset()
         self.env.set_env_state(self.env_init_state)
         self.cur_step = 0
+        self.succ_step = 0
         obs_dict = self.get_obs_dict()
         if self.oracle:
             obs_dict['full_state'] = full_state
