@@ -32,20 +32,20 @@ python train.py --config-name='train_dp_moe_rgb' \
         task.lazy_eval=True \
         hydra.run.dir='output/20250228/085306_train_dp_moe_rgb_rb-mt4_N200'
 
+
+
 # python train.py --config-name='train_dp_moe_rgb' \
-#         task=metaworld/mt10 \
+#         task=metaworld/mt6 \
+#         policy.n_layer=8 \
 #         training.num_epochs=2001 \
-#         training.num_demo=100 \
-#         dataloader.batch_size=128 \
-#         val_dataloader.batch_size=128 \
+#         training.num_demo=150 \
+#         dataloader.batch_size=256 \
+#         val_dataloader.batch_size=256 \
 #         dataloader.num_workers=4 \
 #         val_dataloader.num_workers=4 \
-#         training.rollout_every=50 \
-#         training.checkpoint_every=50 \
-#         training.val_every=5 \
-#         training.sample_every=5 \
+#         training.rollout_every=250 \
+#         training.checkpoint_every=10 \
 #         task.lazy_eval=False
-
 
 # python train.py --config-name='adapt_dp_moe_rgb' \
 #         task=rlbench/mt4 \

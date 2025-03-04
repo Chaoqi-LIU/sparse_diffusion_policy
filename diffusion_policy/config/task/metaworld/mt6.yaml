@@ -36,7 +36,7 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy.dataset.metaworld_dataset.MetaworldDataset
-  zarr_path: data/metaworld/mt6_expert_100.zarr
+  zarr_path: data/metaworld/mt6_expert_${training.num_demo}.zarr
   obs_keys:
     - corner2_rgb
     - behindGripper_rgb
