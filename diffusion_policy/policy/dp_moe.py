@@ -188,7 +188,7 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
             fix_obs_steps=True,
             action_visible=False
         )
-        self.normalizers = [] #LinearNormalizer()
+        self.normalizers = nn.ModuleList(LinearNormalizer() for _ in range(n_tasks))
         self.horizon = horizon
         self.obs_feature_dim = obs_feature_dim
         self.action_dim = action_dim
