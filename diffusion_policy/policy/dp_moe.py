@@ -314,6 +314,7 @@ class DiffusionTransformerMoePolicy(BaseImagePolicy):
 
     # ========= training  ============
     def set_normalizer(self, normalizers):
+        self.normalizers = nn.ModuleList()
         for normalizer in normalizers:
             self.normalizers.append(LinearNormalizer())
             self.normalizers[-1].load_state_dict(normalizer.state_dict())

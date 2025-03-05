@@ -60,7 +60,10 @@ class AdaptMoePolicyWorkspace(BaseWorkspace):
 
         # introduce new unets if needed
         if 'new_experts' in cfg.policy.adapt_method:
-            self.model.augment_experts(num_experts=self.model.num_experts + 2)  # TODO: make this configurable
+            new_experts = 2
+            print(f"Augmenting experts by {new_experts}")
+            self.model.augment_experts(num_experts=self.model.num_experts + new_experts)  # TODO: make this configurable
+        assert len(self.model.normalizers) == 1, len(self.model.normalizers)
 
         # set seed
         seed = cfg.training.seed
@@ -132,6 +135,7 @@ class AdaptMoePolicyWorkspace(BaseWorkspace):
         self.model.set_normalizer(normalizers)
         if cfg.training.use_ema:
             self.ema_model.set_normalizer(normalizers)
+        assert len(self.model.normalizers) == 1, len(self.model.normalizers)
 
         # configure lr scheduler
         lr_scheduler = get_scheduler(

@@ -14,7 +14,7 @@ if __name__ == "__main__":
     os.chdir(ROOT_DIR)
 
 
-dir = 'output/20250303/004123_train_dp_moe_rgb_rb-mt4_N200/checkpoints/'
+dir = 'output/20250304/003706_train_dp_moe_rgb_mw-mt6_N150/checkpoints/'
 ckpts = [
     os.path.join(dir, f)
     for f in os.listdir(dir)
@@ -30,7 +30,8 @@ for ckpt in ckpts:
     workspace.load_payload(payload, exclude_keys=None, include_keys=None)
 
     policy = workspace.model
-    assert len(policy.normalizers) == 1
+    # assert len(policy.normalizers) == 0, len(policy.normalizers)
+    print(f"{len(policy.normalizers)=}")
 
     # if len(policy.normalizers) == 0:
     #     dataset = hydra.utils.instantiate(cfg.task0.dataset)

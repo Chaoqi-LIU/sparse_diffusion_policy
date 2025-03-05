@@ -69,12 +69,19 @@ export HYDRA_FULL_ERROR=1
 #         training.checkpoint_every=10 \
 #         task.lazy_eval=False
 
+
+# TEST DP_MOE adapt
 # python train.py --config-name='adapt_dp_moe_rgb' \
-#         task=rlbench/mt4 \
-#         training.num_demo=200 \
+#         task=metaworld/mt4 \
+#         training.num_demo=100 \
 #         training.num_epochs=2001 \
-#         policy.adapt_method='router+obs_encoder' \
-#         model_path='output/20250227/202056_train_dp_moe_rgb_rb-mt4_N200/checkpoints/latest.ckpt' \
-#         task.lazy_eval=True \
-#         hydra.run.dir='output/20250228/023551_adapt_dp_moe_rgb_rb-mt4_N200' \
-#         +dataloader.batch_size=256
+#         policy.adapt_method='router+obs_encoder+new_experts' \
+#         model_path='output/20250304/003706_train_dp_moe_rgb_mw-mt6_N150/checkpoints/latest.ckpt' \
+#         task.lazy_eval=True
+# export PYTORCH_NVFUSER_DISABLE=fallback
+python eval.py \
+        -c 'output/20250304/214157_adapt_dp_moe_rgb_mw-mt4_N100/checkpoints/' \
+        -o 'output/eval_moe' \
+        -n 2 \
+        --update
+# unset PYTORCH_NVFUSER_DISABLE

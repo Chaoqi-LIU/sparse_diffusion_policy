@@ -32,7 +32,6 @@ class MetaworldDataset(BaseImageDataset):
         max_train_episodes: Optional[int] = None,
     ):
         super().__init__()
-        print(f"{zarr_path=}")
         self.replay_buffer = ReplayBuffer.copy_from_path(
             zarr_path, keys=['action', *obs_keys],
         )
